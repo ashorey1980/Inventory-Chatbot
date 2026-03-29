@@ -1,0 +1,33 @@
+{
+  "name": "MCP Inventory Chatbot",
+  "description": "AI-powered inventory chatbot using MCP Server and MuleSoft AI Gateway",
+  "keywords": [
+    "mcp",
+    "chatbot",
+    "ai",
+    "mulesoft",
+    "inventory",
+    "gemini"
+  ],
+  "website": "https://github.com/your-repo/mcp-test-client",
+  "repository": "https://github.com/your-repo/mcp-test-client",
+  "logo": "https://www.mulesoft.com/sites/default/files/cmm_files/ms-logo-2022.svg",
+  "success_url": "/",
+  "env": {
+    "NODE_ENV": {
+      "description": "Node environment",
+      "value": "production"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ]
+}
