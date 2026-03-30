@@ -27,7 +27,6 @@ class ChatSession {
     this.chatHistory = [];
     this.initialized = false;
     this.accessToken = null;
-    this.modelName = null;
     // Token tracking - Input (prompt) and Output (completion)
     this.totalInputTokens = 0;
     this.totalOutputTokens = 0;
@@ -122,30 +121,8 @@ class ChatSession {
         }
       };
 
-      console.log('🔑 Using client_id:', this.clientId);
-      console.log('📤 Request body:', postData);
-
       const req = httpModule.request(options, (res) => {
         let data = '';
-
-        // Log response headers
-        console.log('📥 Response headers:', JSON.stringify({
-          'x-llm-proxy-llm-model': res.headers['x-llm-proxy-llm-model'],
-          'x-llm-proxy-llm-provider': res.headers['x-llm-proxy-llm-provider']
-        }));
-
-        // Capture model info from headers if available
-        if (res.headers['x-llm-proxy-llm-model']) {
-          this.modelName = res.headers['x-llm-proxy-llm-model'];
-          console.log('📋 Model from header x-llm-proxy-llm-model:', this.modelName);
-        }
-        if (res.headers['x-llm-proxy-llm-provider']) {
-          const provider = res.headers['x-llm-proxy-llm-provider'];
-          if (!this.modelName && provider) {
-            this.modelName = provider;
-            console.log('📋 Model from header x-llm-proxy-llm-provider:', this.modelName);
-          }
-        }
 
         res.on('data', (chunk) => data += chunk);
         res.on('end', () => {
@@ -161,13 +138,6 @@ class ChatSession {
             // Try to parse as JSON, fallback to text
             try {
               const response = JSON.parse(data);
-              console.log('📦 Response body model field:', response.model);
-
-              // Extract model name from response body (takes precedence over headers)
-              if (response.model) {
-                this.modelName = response.model;
-                console.log('📋 Model from response body (final):', this.modelName);
-              }
 
               // Extract token usage if provided by the API
               // Support both OpenAI format (prompt_tokens/completion_tokens) and MuleSoft format (input_tokens/output_tokens)
@@ -257,14 +227,103 @@ IMPORTANT:
     // Reset last request tokens
     this.lastRequestTokens = { input: 0, output: 0 };
 
-    // Send only the user's message directly without system prompt or history
-    const llmResponse = await this.callLLMProxy(userMessage);
+    // Build conversation history for LLM
+    let prompt = this.getSystemPrompt() + '\n\n';
+
+    // Add recent history
+    this.chatHistory.slice(-6).forEach(msg => {
+      prompt += `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}\n`;
+    });
+
+    prompt += `User: ${userMessage}\nAssistant:`;
+
+    // Get response from LLM Proxy
+    const llmResponse = await this.callLLMProxy(prompt);
     this.lastRequestTokens.input += llmResponse.tokens.input;
     this.lastRequestTokens.output += llmResponse.tokens.output;
     this.totalInputTokens += llmResponse.tokens.input;
     this.totalOutputTokens += llmResponse.tokens.output;
 
-    // Store in history
+    // Check if response contains a function call
+    if (llmResponse.text && llmResponse.text.includes('FUNCTION_CALL:')) {
+      const jsonMatch = llmResponse.text.match(/FUNCTION_CALL:\s*(\{.*\})/);
+      if (jsonMatch) {
+        const functionCall = JSON.parse(jsonMatch[1]);
+
+        // Track MCP request size as input tokens
+        const mcpRequestSize = JSON.stringify({
+          name: functionCall.function,
+          arguments: functionCall.arguments
+        });
+        const mcpRequestTokens = this.estimateTokens(mcpRequestSize);
+
+        // Execute the MCP tool
+        const toolResult = await this.mcpClient.callTool(
+          functionCall.function,
+          functionCall.arguments
+        );
+
+        // Extract text content from tool result
+        let toolData = '';
+        if (toolResult.content && toolResult.content[0]) {
+          toolData = toolResult.content[0].text;
+        }
+
+        // Track MCP response size as output tokens
+        const mcpResponseTokens = this.estimateTokens(toolData);
+        this.totalInputTokens += mcpRequestTokens;
+        this.totalOutputTokens += mcpResponseTokens;
+        this.lastRequestTokens.input += mcpRequestTokens;
+        this.lastRequestTokens.output += mcpResponseTokens;
+
+        // Store tool result
+        this.chatHistory.push({
+          role: 'user',
+          content: userMessage
+        });
+
+        this.chatHistory.push({
+          role: 'assistant',
+          content: `Function called: ${functionCall.function}\nResult: ${toolData}`
+        });
+
+        // Ask LLM to explain the results
+        const explainPrompt = `${this.getSystemPrompt()}
+
+Previous conversation:
+${this.chatHistory.slice(-4).map(m => `${m.role}: ${m.content}`).join('\n')}
+
+The tool returned this data:
+${toolData}
+
+Please explain these results to the user in a friendly, conversational way.`;
+
+        const explanation = await this.callLLMProxy(explainPrompt);
+        this.lastRequestTokens.input += explanation.tokens.input;
+        this.lastRequestTokens.output += explanation.tokens.output;
+        this.totalInputTokens += explanation.tokens.input;
+        this.totalOutputTokens += explanation.tokens.output;
+
+        this.chatHistory.push({
+          role: 'assistant',
+          content: explanation.text
+        });
+
+        return {
+          message: explanation.text,
+          toolCalled: functionCall.function,
+          toolData: JSON.parse(toolData),
+          tokens: {
+            input: this.lastRequestTokens.input,
+            output: this.lastRequestTokens.output,
+            totalInput: this.totalInputTokens,
+            totalOutput: this.totalOutputTokens
+          }
+        };
+      }
+    }
+
+    // Regular conversational response
     this.chatHistory.push({
       role: 'user',
       content: userMessage
@@ -275,7 +334,6 @@ IMPORTANT:
       content: llmResponse.text
     });
 
-    // Return response directly without tool calling
     return {
       message: llmResponse.text,
       toolCalled: null,
@@ -285,8 +343,7 @@ IMPORTANT:
         output: this.lastRequestTokens.output,
         totalInput: this.totalInputTokens,
         totalOutput: this.totalOutputTokens
-      },
-      model: this.modelName || 'Unknown'
+      }
     };
   }
 }

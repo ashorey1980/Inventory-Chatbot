@@ -11,28 +11,43 @@
    Version: 1.12.1
    Protocol: 2025-11-25
 
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"contents":[{"role":"user","parts":[{"text":"How to calculate simple interest"}]}]}
-📥 Response headers: {}
 Format 1 failed: 404: 
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"messages":[{"role":"user","content":"How to calculate simple interest"}]}
-📥 Response headers: {}
 Format 2 failed: 404: 
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"text":"How to calculate simple interest"}
-📥 Response headers: {}
 Format 3 failed: 404: 
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"prompt":"How to calculate simple interest"}
-📥 Response headers: {}
 Format 4 failed: 404: 
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"input":"How to calculate simple interest"}
-📥 Response headers: {"x-llm-proxy-llm-model":"gpt-5-mini","x-llm-proxy-llm-provider":"openai"}
-📋 Model from header x-llm-proxy-llm-model: gpt-5-mini
-📦 Response body model field: gpt-5-mini-2025-08-07
-📋 Model from response body (final): gpt-5-mini-2025-08-07
+✅ Format 5 succeeded
+🔧 Calling tool: get_inventory_products_productid
+   Arguments: {
+  "productId": "912"
+}
+
+✅ Tool executed successfully
+
+Response:
+{
+  "productId": "912",
+  "productName": "Standing Desk",
+  "sku": "string",
+  "totalQuantity": 100,
+  "totalReserved": 0,
+  "totalAvailable": 100,
+  "warehouses": [
+    {
+      "warehouseId": "18",
+      "warehouseName": "Madrid Warehouse",
+      "quantity": 200,
+      "reserved": 100,
+      "available": 100
+    }
+  ]
+}
+
+================================================================================
+
+Format 1 failed: 404: 
+Format 2 failed: 404: 
+Format 3 failed: 404: 
+Format 4 failed: 404: 
 ✅ Format 5 succeeded
 🔌 Initializing MCP connection...
 
@@ -41,49 +56,41 @@ Format 4 failed: 404:
    Version: 1.12.1
    Protocol: 2025-11-25
 
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"contents":[{"role":"user","parts":[{"text":"How to calculate Simple Interest"}]}]}
-📥 Response headers: {}
 Format 1 failed: 404: 
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"messages":[{"role":"user","content":"How to calculate Simple Interest"}]}
-📥 Response headers: {}
 Format 2 failed: 404: 
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"text":"How to calculate Simple Interest"}
-📥 Response headers: {}
 Format 3 failed: 404: 
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"prompt":"How to calculate Simple Interest"}
-📥 Response headers: {}
 Format 4 failed: 404: 
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"input":"How to calculate Simple Interest"}
-📥 Response headers: {"x-llm-proxy-llm-model":"gpt-5-mini","x-llm-proxy-llm-provider":"openai"}
-📋 Model from header x-llm-proxy-llm-model: gpt-5-mini
-📦 Response body model field: gpt-5-mini-2025-08-07
-📋 Model from response body (final): gpt-5-mini-2025-08-07
 ✅ Format 5 succeeded
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"contents":[{"role":"user","parts":[{"text":"What is product 912?"}]}]}
-📥 Response headers: {}
+🔧 Calling tool: get_inventory_products_productid
+   Arguments: {
+  "productId": "912"
+}
+
+✅ Tool executed successfully
+
+Response:
+{
+  "productId": "912",
+  "productName": "Standing Desk",
+  "sku": "string",
+  "totalQuantity": 100,
+  "totalReserved": 0,
+  "totalAvailable": 100,
+  "warehouses": [
+    {
+      "warehouseId": "18",
+      "warehouseName": "Madrid Warehouse",
+      "quantity": 200,
+      "reserved": 100,
+      "available": 100
+    }
+  ]
+}
+
+================================================================================
+
 Format 1 failed: 404: 
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"messages":[{"role":"user","content":"What is product 912?"}]}
-📥 Response headers: {}
 Format 2 failed: 404: 
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"text":"What is product 912?"}
-📥 Response headers: {}
 Format 3 failed: 404: 
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"prompt":"What is product 912?"}
-📥 Response headers: {}
 Format 4 failed: 404: 
-🔑 Using client_id: 4cc1c528204f41fe9883f870d21a14c9
-📤 Request body: {"input":"What is product 912?"}
-📥 Response headers: {"x-llm-proxy-llm-model":"gemini-3-pro-preview","x-llm-proxy-llm-provider":"gemini"}
-📋 Model from header x-llm-proxy-llm-model: gemini-3-pro-preview
-📦 Response body model field: gemini-3.1-pro-preview
-📋 Model from response body (final): gemini-3.1-pro-preview
 ✅ Format 5 succeeded

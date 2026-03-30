@@ -590,7 +590,7 @@
             contentDiv.textContent = content;
 
             // Add metadata for assistant messages
-            if (type === 'assistant' && (toolCalled || tokens || model)) {
+            if (type === 'assistant' && (toolCalled || tokens)) {
                 const metaDiv = document.createElement('div');
                 metaDiv.className = 'message-meta';
 
@@ -599,13 +599,6 @@
                     toolBadge.className = 'tool-badge';
                     toolBadge.textContent = `🔧 ${toolCalled}`;
                     metaDiv.appendChild(toolBadge);
-                }
-
-                if (model && model !== 'Unknown') {
-                    const modelBadge = document.createElement('span');
-                    modelBadge.className = 'model-badge';
-                    modelBadge.textContent = `🤖 ${model}`;
-                    metaDiv.appendChild(modelBadge);
                 }
 
                 if (tokens) {
