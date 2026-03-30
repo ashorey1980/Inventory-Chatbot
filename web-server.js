@@ -27,6 +27,17 @@ class ChatSession {
     this.chatHistory = [];
     this.initialized = false;
     this.accessToken = null;
+    this.modelName = null;
+    // Token tracking - Input (prompt) and Output (completion)
+    this.totalInputTokens = 0;
+    this.totalOutputTokens = 0;
+    this.lastRequestTokens = { input: 0, output: 0 };
+  }
+
+  // Estimate tokens (rough approximation: 1 token ≈ 4 characters)
+  estimateTokens(text) {
+    if (!text) return 0;
+    return Math.ceil(text.length / 4);
   }
 
   async initialize() {
@@ -45,9 +56,8 @@ class ChatSession {
           { role: 'user', parts: [{ text: prompt }] }
         ]
       },
-      // Format 2: OpenAI-style messages with model
+      // Format 2: OpenAI-style messages
       {
-        model: 'gemini-pro',
         messages: [
           { role: 'user', content: prompt }
         ]
@@ -112,8 +122,31 @@ class ChatSession {
         }
       };
 
+      console.log('🔑 Using client_id:', this.clientId);
+      console.log('📤 Request body:', postData);
+
       const req = httpModule.request(options, (res) => {
         let data = '';
+
+        // Log response headers
+        console.log('📥 Response headers:', JSON.stringify({
+          'x-llm-proxy-llm-model': res.headers['x-llm-proxy-llm-model'],
+          'x-llm-proxy-llm-provider': res.headers['x-llm-proxy-llm-provider']
+        }));
+
+        // Capture model info from headers if available
+        if (res.headers['x-llm-proxy-llm-model']) {
+          this.modelName = res.headers['x-llm-proxy-llm-model'];
+          console.log('📋 Model from header x-llm-proxy-llm-model:', this.modelName);
+        }
+        if (res.headers['x-llm-proxy-llm-provider']) {
+          const provider = res.headers['x-llm-proxy-llm-provider'];
+          if (!this.modelName && provider) {
+            this.modelName = provider;
+            console.log('📋 Model from header x-llm-proxy-llm-provider:', this.modelName);
+          }
+        }
+
         res.on('data', (chunk) => data += chunk);
         res.on('end', () => {
           try {
@@ -121,25 +154,64 @@ class ChatSession {
               reject(new Error(`${res.statusCode}: ${data}`));
               return;
             }
+
+            let responseText = '';
+            let tokenUsage = null;
+
             // Try to parse as JSON, fallback to text
             try {
               const response = JSON.parse(data);
-              // Handle MuleSoft semantic proxy response format
-              if (response.output && response.output[0] && response.output[0].content) {
-                const content = response.output[0].content[0];
-                if (content && content.text) {
-                  resolve(content.text);
-                  return;
-                }
+              console.log('📦 Response body model field:', response.model);
+
+              // Extract model name from response body (takes precedence over headers)
+              if (response.model) {
+                this.modelName = response.model;
+                console.log('📋 Model from response body (final):', this.modelName);
               }
-              // Fallback to other common formats
-              const text = response.text || response.response || response.message ||
-                          response.content || response.result ||
-                          JSON.stringify(response);
-              resolve(text);
+
+              // Extract token usage if provided by the API
+              // Support both OpenAI format (prompt_tokens/completion_tokens) and MuleSoft format (input_tokens/output_tokens)
+              if (response.usage) {
+                tokenUsage = {
+                  prompt_tokens: response.usage.input_tokens || response.usage.prompt_tokens || 0,
+                  completion_tokens: response.usage.output_tokens || response.usage.completion_tokens || 0,
+                  total_tokens: response.usage.total_tokens || 0
+                };
+              }
+
+              // Handle MuleSoft semantic proxy response format
+              if (response.output && response.output[0]) {
+                // Find the message output (skip reasoning output)
+                const messageOutput = response.output.find(o => o.type === 'message');
+                if (messageOutput && messageOutput.content && messageOutput.content[0]) {
+                  const content = messageOutput.content[0];
+                  if (content.text) {
+                    responseText = content.text;
+                  }
+                }
+              } else {
+                // Fallback to other common formats
+                responseText = response.text || response.response || response.message ||
+                            response.content || response.result ||
+                            JSON.stringify(response);
+              }
             } catch {
-              resolve(data); // Return raw text if not JSON
+              responseText = data; // Return raw text if not JSON
             }
+
+            // Track tokens (use actual if available, else estimate)
+            const promptTokens = tokenUsage ? tokenUsage.prompt_tokens : this.estimateTokens(postData);
+            const completionTokens = tokenUsage ? tokenUsage.completion_tokens : this.estimateTokens(responseText);
+            const totalTokens = tokenUsage ? tokenUsage.total_tokens : (promptTokens + completionTokens);
+
+            resolve({
+              text: responseText,
+              tokens: {
+                input: promptTokens,
+                output: completionTokens,
+                total: totalTokens
+              }
+            });
           } catch (e) {
             reject(new Error(`Parse error: ${e.message}`));
           }
@@ -182,75 +254,17 @@ IMPORTANT:
   }
 
   async processMessage(userMessage) {
-    // Build conversation history for LLM
-    let prompt = this.getSystemPrompt() + '\n\n';
+    // Reset last request tokens
+    this.lastRequestTokens = { input: 0, output: 0 };
 
-    // Add recent history
-    this.chatHistory.slice(-6).forEach(msg => {
-      prompt += `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}\n`;
-    });
+    // Send only the user's message directly without system prompt or history
+    const llmResponse = await this.callLLMProxy(userMessage);
+    this.lastRequestTokens.input += llmResponse.tokens.input;
+    this.lastRequestTokens.output += llmResponse.tokens.output;
+    this.totalInputTokens += llmResponse.tokens.input;
+    this.totalOutputTokens += llmResponse.tokens.output;
 
-    prompt += `User: ${userMessage}\nAssistant:`;
-
-    // Get response from LLM Proxy
-    const response = await this.callLLMProxy(prompt);
-
-    // Check if response contains a function call
-    if (response.includes('FUNCTION_CALL:')) {
-      const jsonMatch = response.match(/FUNCTION_CALL:\s*(\{.*\})/);
-      if (jsonMatch) {
-        const functionCall = JSON.parse(jsonMatch[1]);
-
-        // Execute the MCP tool
-        const toolResult = await this.mcpClient.callTool(
-          functionCall.function,
-          functionCall.arguments
-        );
-
-        // Extract text content from tool result
-        let toolData = '';
-        if (toolResult.content && toolResult.content[0]) {
-          toolData = toolResult.content[0].text;
-        }
-
-        // Store tool result
-        this.chatHistory.push({
-          role: 'user',
-          content: userMessage
-        });
-
-        this.chatHistory.push({
-          role: 'assistant',
-          content: `Function called: ${functionCall.function}\nResult: ${toolData}`
-        });
-
-        // Ask LLM to explain the results
-        const explainPrompt = `${this.getSystemPrompt()}
-
-Previous conversation:
-${this.chatHistory.slice(-4).map(m => `${m.role}: ${m.content}`).join('\n')}
-
-The tool returned this data:
-${toolData}
-
-Please explain these results to the user in a friendly, conversational way.`;
-
-        const explanation = await this.callLLMProxy(explainPrompt);
-
-        this.chatHistory.push({
-          role: 'assistant',
-          content: explanation
-        });
-
-        return {
-          message: explanation,
-          toolCalled: functionCall.function,
-          toolData: JSON.parse(toolData)
-        };
-      }
-    }
-
-    // Regular conversational response
+    // Store in history
     this.chatHistory.push({
       role: 'user',
       content: userMessage
@@ -258,13 +272,21 @@ Please explain these results to the user in a friendly, conversational way.`;
 
     this.chatHistory.push({
       role: 'assistant',
-      content: response
+      content: llmResponse.text
     });
 
+    // Return response directly without tool calling
     return {
-      message: response,
+      message: llmResponse.text,
       toolCalled: null,
-      toolData: null
+      toolData: null,
+      tokens: {
+        input: this.lastRequestTokens.input,
+        output: this.lastRequestTokens.output,
+        totalInput: this.totalInputTokens,
+        totalOutput: this.totalOutputTokens
+      },
+      model: this.modelName || 'Unknown'
     };
   }
 }

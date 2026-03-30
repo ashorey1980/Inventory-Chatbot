@@ -247,6 +247,30 @@
             border-radius: 4px;
             font-size: 11px;
             margin-top: 8px;
+            margin-right: 4px;
+        }
+
+        .message-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+            font-size: 10px;
+        }
+
+        .model-badge {
+            padding: 4px 8px;
+            background: #e3f2fd;
+            color: #1976d2;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .token-badge {
+            padding: 4px 8px;
+            background: #f5f5f5;
+            color: #666;
+            border-radius: 4px;
         }
 
         .input-area {
@@ -546,7 +570,7 @@
                     throw new Error(data.error || 'Failed to send message');
                 }
 
-                addMessage('assistant', data.message, data.toolCalled);
+                addMessage('assistant', data.message, data.toolCalled, data.tokens, data.model);
             } catch (error) {
                 removeLoadingMessage();
                 addMessage('system', '❌ Error: ' + error.message);
@@ -556,7 +580,7 @@
             input.focus();
         }
 
-        function addMessage(type, content, toolCalled = null) {
+        function addMessage(type, content, toolCalled = null, tokens = null, model = null) {
             const messagesDiv = document.getElementById('messages');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${type}`;
@@ -565,11 +589,34 @@
             contentDiv.className = 'message-content';
             contentDiv.textContent = content;
 
-            if (toolCalled) {
-                const badge = document.createElement('div');
-                badge.className = 'tool-badge';
-                badge.textContent = `🔧 ${toolCalled}`;
-                contentDiv.appendChild(badge);
+            // Add metadata for assistant messages
+            if (type === 'assistant' && (toolCalled || tokens || model)) {
+                const metaDiv = document.createElement('div');
+                metaDiv.className = 'message-meta';
+
+                if (toolCalled) {
+                    const toolBadge = document.createElement('span');
+                    toolBadge.className = 'tool-badge';
+                    toolBadge.textContent = `🔧 ${toolCalled}`;
+                    metaDiv.appendChild(toolBadge);
+                }
+
+                if (model && model !== 'Unknown') {
+                    const modelBadge = document.createElement('span');
+                    modelBadge.className = 'model-badge';
+                    modelBadge.textContent = `🤖 ${model}`;
+                    metaDiv.appendChild(modelBadge);
+                }
+
+                if (tokens) {
+                    const totalTokens = tokens.input + tokens.output;
+                    const tokenBadge = document.createElement('span');
+                    tokenBadge.className = 'token-badge';
+                    tokenBadge.textContent = `📊 Prompt: ${tokens.input} | Total: ${totalTokens}`;
+                    metaDiv.appendChild(tokenBadge);
+                }
+
+                contentDiv.appendChild(metaDiv);
             }
 
             messageDiv.appendChild(contentDiv);
@@ -621,8 +668,10 @@
             errorContainer.innerHTML = `<div class="error-message">${message}</div>`;
         }
 
-        // Focus API key input on load
-        document.getElementById('apiKey').focus();
+        // Focus proxy endpoint input on load
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('proxyEndpoint').focus();
+        });
     </script>
 </body>
 </html>
